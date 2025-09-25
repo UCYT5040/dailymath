@@ -123,8 +123,8 @@
 		const height = pixelHeight / overlayCanvas.height;
 
 		// Default values, adjustable by UI
-		const questionNumber = selections ? selections.length + 1 : 1;
-		const type = 'question';
+		const questionNumber = selections ? selections[selections.length - 1]?.questionNumber + 1 : 1;
+		const type = selections ? selections[selections.length - 1]?.type : 'question';
 
 		const newSelection: Selection = { x, y, width, height, questionNumber, type, pageNumber };
 		selections = selections ? [...selections, newSelection] : [newSelection];
