@@ -14,7 +14,9 @@ export async function getDailyQuestion(test: "algebra1" | "geometry" | "algebra2
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     const hashInt = parseInt(hashHex.slice(0, 8), 16);
     
-    const competitions = await listRows(tables.competitions);
+    const competitions = await listRows(tables.competitions, [
+        Query.equal("active", true)
+    ]);
     const competitionIndex = hashInt % competitions.length;
     const competition = competitions[competitionIndex];
 
@@ -34,5 +36,5 @@ export async function getDailyQuestion(test: "algebra1" | "geometry" | "algebra2
     }
     const questionIndex = questionHashInt % questions.length;
 
-    return questions[questionIndex].$id;
+    return {question: questions[questionIndex], competition};
 }

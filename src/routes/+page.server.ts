@@ -7,8 +7,8 @@ export const load: PageServerLoad = async () => {
     const questions = [];
     for (const test of tests) {
         try {
-            const questionId = await getDailyQuestion(test);
-        questions.push({ test, questionId });
+            const questionData = await getDailyQuestion(test);
+        questions.push({ test, questionData });
         } catch (error) {
             console.error(`Error fetching question for ${test}:`, error);
         }
