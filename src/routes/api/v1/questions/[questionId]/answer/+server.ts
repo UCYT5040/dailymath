@@ -52,13 +52,23 @@ export const GET: RequestHandler = async ({ params }) => {
         .extract({ left: trueX, top: trueY, width: trueWidth, height: trueHeight })
         .toBuffer();
 
+    // Cache for 1 year (31,536,000 seconds)
+    const maxAge = 31536000;
+    const expiryDate = new Date();
+    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
     // Return the cropped image
-    const croppedArrayBuffer = croppedBuffer.buffer.slice(croppedBuffer.byteOffset, croppedBuffer.byteOffset + croppedBuffer.byteLength);
+    const croppedArrayBuffer = new ArrayBuffer(croppedBuffer.byteLength);
+    new Uint8Array(croppedArrayBuffer).set(croppedBuffer);
 
     return new Response(croppedArrayBuffer, {
         headers: {
-            'Content-Type': 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${pageId}.png"`
+            'Content-Type': 'image/png',
+            'Content-Disposition': `inline; filename="${pageId}-${answer.$id}.png"`,
+            'Cache-Control': `public, max-age=${maxAge}, immutable`,
+            'Expires': expiryDate.toUTCString(),
+            'ETag': `"${pageId}-${answer.$id}"`,
+            'Last-Modified': new Date(answer.$createdAt).toUTCString()
         }
     });
 };
