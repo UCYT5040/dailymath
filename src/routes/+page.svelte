@@ -59,10 +59,6 @@
 		<!-- Header -->
 		<div class="mb-12 text-center">
 			<h1 class="mb-4 text-4xl font-bold text-gray-800 md:text-5xl">Daily Math Questions</h1>
-			<p class="mx-auto max-w-2xl text-lg text-gray-600">
-				Challenge yourself with daily math problems from various competitions. Select the subjects
-				you're interested in and start practicing!
-			</p>
 		</div>
 
 		<!-- Subject Selection -->
