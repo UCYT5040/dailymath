@@ -1,6 +1,5 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { pdf } from "pdf-to-img";
-import { promises as fs } from "node:fs";
 import {createRow, getRow, listRows, tables, updateRow} from "$lib/server/database";
 import { uploadFileToBucket } from "$lib/server/storage";
 import type { Models } from "node-appwrite";
