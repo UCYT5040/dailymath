@@ -30,3 +30,15 @@ export async function getFileForView(fileId: string) {
         throw new Error("Failed to get file view");
     }
 }
+
+export async function getFileMetadata(fileId: string) {
+    try {
+        return await storage.getFile({
+            bucketId: APPWRITE_BUCKET_ID,
+            fileId: fileId
+        });
+    } catch (error) {
+        console.error(`Error getting file metadata for file ${fileId}:`, error);
+        throw new Error("Failed to get file metadata");
+    }
+}

@@ -174,6 +174,12 @@
 									</div>
 								{/if}
 							</div>
+
+							<p class="text-center mt-2">
+								<a href="/questions/{questionData.question.$id}" class="text-blue-600 hover:underline">
+									Solutions</a
+								>
+							</p>
 						</div>
 					</div>
 				{/if}

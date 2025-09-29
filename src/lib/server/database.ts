@@ -3,7 +3,8 @@ import {
 	APPWRITE_TABLE_ANSWERS_ID,
     APPWRITE_TABLE_COMPETITIONS_ID,
     APPWRITE_TABLE_UPLOADS_ID,
-    APPWRITE_TABLE_QUESTIONS_ID
+    APPWRITE_TABLE_QUESTIONS_ID,
+	APPWRITE_TABLE_SOLUTIONS_ID
 } from '$env/static/private';
 import { serverClient } from '$lib/server/appwrite';
 import { Databases, ID, Query, TablesDB } from 'node-appwrite';
@@ -25,7 +26,8 @@ export const tables = {
 	answers: APPWRITE_TABLE_ANSWERS_ID,
 	competitions: APPWRITE_TABLE_COMPETITIONS_ID,
 	uploads: APPWRITE_TABLE_UPLOADS_ID,
-	questions: APPWRITE_TABLE_QUESTIONS_ID
+	questions: APPWRITE_TABLE_QUESTIONS_ID,
+	solutions: APPWRITE_TABLE_SOLUTIONS_ID
 };
 
 // TODO: type the queries parameter
