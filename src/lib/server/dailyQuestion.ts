@@ -15,7 +15,8 @@ export async function getDailyQuestion(test: "algebra1" | "geometry" | "algebra2
     const hashInt = parseInt(hashHex.slice(0, 8), 16);
     
     const competitions = await listRows(tables.competitions, [
-        Query.equal("active", true)
+        Query.equal("active", true),
+        Query.select(["year", "division", "location"])
     ]);
     const competitionIndex = hashInt % competitions.length;
     const competition = competitions[competitionIndex];
