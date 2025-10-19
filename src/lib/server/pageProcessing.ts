@@ -4,6 +4,7 @@ import { type Models, Query } from 'node-appwrite';
 import { getFileForView } from './storage';
 import { testNames } from '$lib/tests';
 import { ai, isAutoGenerationAllowed } from './ai';
+import type { GenerateContentResponse } from '@google/genai';
 
 let isProcessorIdle = false;
 
@@ -98,7 +99,10 @@ export async function processSinglePage(
 
     const pageData = await getFileForView(pageId);
 
-    const result = await ai.models.generateContent({
+    let result: GenerateContentResponse | null;
+
+    try {
+        result = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
             prompt,
@@ -116,12 +120,16 @@ export async function processSinglePage(
                 thinkingBudget: 1000
             }
         }
-    });
+    }); } catch (error) {
+        console.error('Error during AI content generation:', error);
+        result = null;
+    }
+    
 
     let resultData;
 
     try {
-        resultData = JSON.parse(result.text || '');
+        resultData = JSON.parse(result?.text || '');
     } catch (e) {
         console.error('Error parsing AI response JSON:', e);
         console.log('JSON parsing failed, will retry this page later.');
