@@ -6,7 +6,6 @@
 	import Calculator from './Calculator.svelte';
 	import Flag from '@lucide/svelte/icons/flag';
 	import FlagOff from '@lucide/svelte/icons/flag-off';
-	
 
 	interface Props {
 		question: any;
@@ -18,7 +17,10 @@
 	let showPage = $state(false);
 	let revealAnswer = $state(false);
 
+	let aiExplanationPending = $state(false);
+
 	async function requestAIExplanation() {
+		aiExplanationPending = true;
 		const response = await fetch(`/api/v1/question/${question.$id}/request-ai-explanation`, {
 			method: 'GET'
 		});
@@ -32,6 +34,7 @@
 		} else {
 			alert('Failed to request AI explanation.');
 		}
+		aiExplanationPending = false;
 	}
 
 	let showReportForm = $state(false);
@@ -111,9 +114,13 @@
 			<button
 				onclick={requestAIExplanation}
 				class="mt-6 rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+				disabled={aiExplanationPending}
 			>
 				Request AI Explanation
 			</button>
+			{#if aiExplanationPending}
+				<p>Generating explanation...</p>
+			{/if}
 			<p>AI explanations may take a few moments to generate.</p>
 		</div>
 	{/if}
