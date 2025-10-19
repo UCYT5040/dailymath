@@ -21,13 +21,20 @@ export const GET: RequestHandler = async ({ params, url }) => {
 
     let parsedTests = tests.split(',');
 
+    let queries = [
+        Query.orderRandom(),
+        Query.limit(limit)
+    ];
+
+    if (parsedTests.length === 1) {
+        queries.unshift(Query.equal('test', parsedTests[0]));
+    } else {
+        queries.unshift(Query.or([...parsedTests.map((test) => Query.equal('test', test))]));
+    }
+
     let questions: Models.DefaultRow[];
     try {
-        questions = await listRows(tables.questions, [
-            Query.or([...parsedTests.map((test) => Query.equal('test', test))]),
-            Query.orderRandom(),
-            Query.limit(limit)
-        ]);
+        questions = await listRows(tables.questions, queries);
     } catch (err) {
         console.error('Error fetching question:', err);
         throw error(404, 'Question not found');
