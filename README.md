@@ -1,38 +1,38 @@
-# sv
+# Daily Math
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Daily math questions.
 
-## Creating a project
+Upload test PDFs at `/upload`. Then view `/uploads` to extract the questions from the PDFs.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Setup
 
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Create an Appwrite project (either self-host or cloud), then set the following environment variables:
 
 ```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+APPWRITE_PROJECT_ID=
+APPWRITE_ENDPOINT=
+APPWRITE_API_KEY=
+APPWRITE_DATABASE_ID=
+APPWRITE_TABLE_ANSWERS_ID=
+APPWRITE_TABLE_COMPETITIONS_ID=
+APPWRITE_TABLE_UPLOADS_ID=
+APPWRITE_TABLE_QUESTIONS_ID=
+APPWRITE_TABLE_SOLUTIONS_ID=
+APPWRITE_BUCKET_ID=
 ```
 
 ## Building
 
-To create a production version of your app:
+To build, use:
 
 ```sh
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+Then, to run:
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+```sh
+node build
+```
+
+Set the `PORT` environment variable if needed.
