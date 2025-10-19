@@ -3,35 +3,34 @@ import type { RequestHandler } from './$types';
 import { getFileForView, getFileMetadata } from '$lib/server/storage';
 import { getRow, tables } from '$lib/server/database';
 import type { Models } from 'node-appwrite';
-import sharp from 'sharp';
 
 export const GET: RequestHandler = async ({ params }) => {
-    const { solutionId } = params;
+    const { explanationId } = params;
 
-    if (!solutionId) {
-        throw error(400, 'Missing solutionId');
+    if (!explanationId) {
+        throw error(400, 'Missing explanationId');
     }
 
-    let solution: Models.DefaultRow;
+    let explanation: Models.DefaultRow;
     try {
-        solution = await getRow(tables.solutions, solutionId);
+        explanation = await getRow(tables.explanations, explanationId);
     } catch (err) {
-        console.error('Error fetching solution:', err);
-        throw error(404, 'Solution not found');
+        console.error('Error fetching explanation:', err);
+        throw error(404, 'Explanation not found');
     }
 
-    const assetId = solution.assetId;
+    const imageId = explanation.imageId;
 
     let fileData;
     try {
-        fileData = await getFileMetadata(assetId);
+        fileData = await getFileMetadata(imageId);
     } catch (err) {
         console.error('Error fetching file metadata:', err);
     }
 
     let arrayBuffer: ArrayBuffer;
     try {
-        arrayBuffer = await getFileForView(assetId);
+        arrayBuffer = await getFileForView(imageId);
     } catch (err) {
         console.error('Error fetching asset:', err);
     }
@@ -54,11 +53,11 @@ export const GET: RequestHandler = async ({ params }) => {
     return new Response(croppedArrayBuffer, {
         headers: {
             'Content-Type': fileData?.mimeType || 'application/octet-stream',
-            'Content-Disposition': `inline; filename="${assetId}.${fileData?.name?.split('.').pop() || 'dat'}"`,
+            'Content-Disposition': `inline; filename="${imageId}.${fileData?.name?.split('.').pop() || 'dat'}"`,
             'Cache-Control': `public, max-age=${maxAge}, immutable`,
             'Expires': expiryDate.toUTCString(),
-            'ETag': `"${assetId}"`,
-            'Last-Modified': new Date(solution.$createdAt).toUTCString()
+            'ETag': `"${imageId}"`,
+            'Last-Modified': new Date(explanation.$createdAt).toUTCString()
         }
     });
 };

@@ -24,6 +24,7 @@
 		"@tailwindcss/typography": "^0.5.15",
 		"@tailwindcss/vite": "^4.0.0",
 		"@types/node": "^22",
+		"cron": "^4.3.3",
 		"eslint": "^9.22.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
@@ -39,11 +40,11 @@
 		"vite": "^7.0.4"
 	},
 	"dependencies": {
+		"@lucide/svelte": "^0.546.0",
 		"@types/marked": "^5.0.2",
 		"katex": "^0.16.25",
 		"marked": "^16.4.1",
 		"node-appwrite": "^19.1.0",
-		"pdf-to-img": "^5.0.0",
-		"sharp": "^0.34.4"
+		"pdf-to-img": "^5.0.0"
 	}
 }

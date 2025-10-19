@@ -31,6 +31,19 @@ export async function getFileForView(fileId: string) {
     }
 }
 
+export async function getFileForPreview(fileId: string) {
+    try {
+        return await storage.getFilePreview({
+            bucketId: APPWRITE_BUCKET_ID,
+            fileId: fileId,
+            width: 400
+        });
+    } catch (error) {
+        console.error(`Error getting file preview for file ${fileId}:`, error);
+        throw new Error("Failed to get file preview");
+    }
+}
+
 export async function getFileMetadata(fileId: string) {
     try {
         return await storage.getFile({

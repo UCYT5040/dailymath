@@ -3,7 +3,6 @@ import type { RequestHandler } from './$types';
 import { getFileForView } from '$lib/server/storage';
 import { getRow, tables } from '$lib/server/database';
 import type { Models } from 'node-appwrite';
-import sharp from 'sharp';
 
 export const GET: RequestHandler = async ({ params }) => {
     const { questionId } = params;
@@ -20,7 +19,7 @@ export const GET: RequestHandler = async ({ params }) => {
         throw error(404, 'Question not found');
     }
 
-    const pageId = question.pageId;
+    const pageId = question.questionPageId;
 
     let arrayBuffer: ArrayBuffer;
     try {
@@ -33,38 +32,12 @@ export const GET: RequestHandler = async ({ params }) => {
         throw error(404, 'Page file not found');
     }
 
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Crop to question dimensions
-    const { x, y, width, height } = question;
-
-    const image = sharp(buffer);
-    const metadata = await image.metadata();
-
-    const trueX = Math.floor(x * metadata.width);
-    const trueY = Math.floor(y * metadata.height);
-    const trueWidth = Math.floor(width * metadata.width);
-    const trueHeight = Math.floor(height * metadata.height);
-
-    const croppedBuffer = await image
-        .extract({ left: trueX, top: trueY, width: trueWidth, height: trueHeight })
-        .toBuffer();
-
-    // Cache for 1 year (31,536,000 seconds)
-    const maxAge = 31536000;
-    const expiryDate = new Date();
-    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-
-    // Return the cropped image
-    const croppedArrayBuffer = new ArrayBuffer(croppedBuffer.byteLength);
-    new Uint8Array(croppedArrayBuffer).set(croppedBuffer);
-
-    return new Response(croppedArrayBuffer, {
+    return new Response(arrayBuffer, {
         headers: {
             'Content-Type': 'image/png',
             'Content-Disposition': `inline; filename="${pageId}-${question.$id}.png"`,
-            'Cache-Control': `public, max-age=${maxAge}, immutable`,
-            'Expires': expiryDate.toUTCString(),
+            'Cache-Control': `public, max-age=31536000, immutable`,
+            'Expires': new Date(Date.now() + 31536000000).toUTCString(),
             'ETag': `"${pageId}-${question.$id}"`,
             'Last-Modified': new Date(question.$createdAt).toUTCString()
         }
