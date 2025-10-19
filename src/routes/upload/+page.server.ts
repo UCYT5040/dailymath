@@ -44,7 +44,7 @@ export const actions = {
         // Create an upload row
         let upload: Models.DefaultRow;
         try {
-            upload = await createRow(tables.uploads, { competitionId: competition.$id, state: "processing", pages: [] });
+            upload = await createRow(tables.uploads, { competitionId: competition.$id, state: "uploading", pages: [], nextPage: 0 });
         } catch (error) {
             console.error("Error creating upload row:", error);
             return { status: 500, body: { error: "Failed to create upload row" } };
@@ -74,7 +74,7 @@ export const actions = {
             }
             // Final update to ensure all pages are saved
             try {
-                await updateRow(tables.uploads, upload.$id, { pages: pageUploadIds, state: "processed" });
+                await updateRow(tables.uploads, upload.$id, { pages: pageUploadIds, state: "processing" });
             } catch (error) {
                 console.error("Error updating upload row:", error);
             }
