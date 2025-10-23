@@ -8,7 +8,12 @@ import type { GenerateContentResponse } from '@google/genai';
 
 let isProcessorIdle = false;
 
-const prompt = `You are a data entry specialist.
+// Some 2-person test packets omit small print questions entirely (only including large print versions).
+// Report reviewers that see this will select all the large print questions and send them to be processed.
+const noLargePrint = ', or large print questions (even if the large print questions are from the included tests)';
+const multiplePagesNote = '\n(in this situation you will be given multiple pages, you should treat them as a single page [you may assume all pages will be the same test and type])';
+
+const prompt = (includeLargePrint: boolean, hasMultiplePages: boolean) => `You are a data entry specialist.
 You are given one page of a math contest.
 First, determine the page type:
 \`questions\` - The page contains questions from the included tests (note that it may skip or exclude some questions: that is, it might not start at question 1)
@@ -16,7 +21,7 @@ First, determine the page type:
 \`none\` - The page contains no relevant information or includes a question/answer from a test not in the list
 The given tests are: ${Object.keys(testNames).map((key) => `${key} (${testNames[key as keyof typeof testNames]})`).join(', ')
     }
-Do not include Relay, Oral, Playoffs, or large print questions (even if the large print questions are from the included tests).
+Do not include Relay, Oral, Playoffs${includeLargePrint ? '' : noLargePrint}.
 Explanation pages are also not relevant.
 Be sure to escape dollar signs if you are not using them for LaTeX formatting.
 Question content: Convert any math notation to LaTeX format, using \$ for inline math and \$\$ for display math. Omit any diagrams or images. Feel free to use newlines and lists to format the content for clarity (if applicable). If a question references a diagram or image, note that in the "includesDiagram" field.
@@ -38,7 +43,7 @@ Return the following JSON:
         "content": string, // Content of the answer
       }
     ] | null // null if pageType is "none" or "questions"
-}
+}${hasMultiplePages ? multiplePagesNote : ''}
 `;
 
 const schema = {
@@ -79,8 +84,8 @@ const schema = {
 
 export async function processSinglePage(
     competitionId: string,
-    pageId: string,
-    options: { override?: boolean } = {}
+    pageIds: string | string[],
+    options: { override?: boolean, allowLargePrint?: boolean } = {}
 ): Promise<any> {
     // Handle rate limiting
     if (options.override) {
@@ -97,7 +102,29 @@ export async function processSinglePage(
         }
     }
 
-    const pageData = await getFileForView(pageId);
+    let normalPageIds: string[] = [];
+
+    if (Array.isArray(pageIds)) {
+        normalPageIds = pageIds;
+    } else {
+        normalPageIds = [pageIds];
+    }
+
+    // TODO: Wait... is this spread operator use even needed? IDK, I'm tired. Leaving it for now.
+    const pagePromises = [
+        ...(Array.isArray(normalPageIds) ? normalPageIds : [normalPageIds]).map((id) => getFileForView(id))
+    ]
+
+    const pageData = await Promise.all(pagePromises);
+
+    const hasMultiplePages = normalPageIds.length > 1;
+
+    const pageDataInline = pageData.map((data) => ({
+        inlineData: {
+            mimeType: "image/png",
+            data: Buffer.from(data).toString('base64'),
+        },
+    }));
 
     let result: GenerateContentResponse | null;
 
@@ -105,20 +132,16 @@ export async function processSinglePage(
         result = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
-            prompt,
-            {
-                inlineData: {
-                    mimeType: "image/png",
-                    data: Buffer.from(pageData).toString('base64'),
-                },
-            },
+            prompt(!!options.allowLargePrint, hasMultiplePages),
+            ...pageDataInline
         ],
         config: {
             responseMimeType: 'application/json',
             responseSchema: schema,
             thinkingConfig: {
                 thinkingBudget: 1000
-            }
+            },
+            maxOutputTokens: 19000
         }
     }); } catch (error) {
         console.error('Error during AI content generation:', error);
@@ -157,7 +180,7 @@ export async function processSinglePage(
                 // Row exists, so update it
                 await updateRow(tables.questions, existingRow.$id, {
                     questionContent: question.content,
-                    questionPageId: pageId,
+                    questionPageId: normalPageIds[0], // TODO: Handle multiple page IDs properly (although, this is such a rare case that it might not matter)
                     includesDiagram: question.includesDiagram
                 });
             } catch (error) {
@@ -167,7 +190,7 @@ export async function processSinglePage(
                     test: resultData.test,
                     questionNumber: question.number,
                     questionContent: question.content,
-                    questionPageId: pageId,
+                    questionPageId: normalPageIds[0], // TODO: See above TODO comment
                     includesDiagram: question.includesDiagram
                 });
             }
@@ -184,7 +207,7 @@ export async function processSinglePage(
                 // Row exists, so update it
                 await updateRow(tables.questions, existingRow.$id, {
                     answerContent: answer.content,
-                    answerPageId: pageId
+                    answerPageId: normalPageIds[0] // TODO: See above TODO comments
                 });
             } catch (error) {
                 // Row does not exist, so create it
@@ -193,7 +216,7 @@ export async function processSinglePage(
                     test: resultData.test,
                     questionNumber: answer.number,
                     answerContent: answer.content,
-                    answerPageId: pageId
+                    answerPageId: normalPageIds[0] // TODO: See above TODO comments
                 });
             }
         }
@@ -230,6 +253,8 @@ async function processQueue() {
     }
 
     const pageId = document.pages[document.nextPage];
+
+    console.log('Processing page PID:', pageId, 'for document:', document.$id);
 
     // Process the page using the extracted function
     const resultData = await processSinglePage(document.competitionId, pageId);
