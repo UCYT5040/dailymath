@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getFileForPreview } from '$lib/server/storage';
+import { getFileForPreview, getFileForView } from '$lib/server/storage';
 import { getRow, tables } from '$lib/server/database';
 import type { Models } from 'node-appwrite';
 
@@ -13,7 +13,9 @@ export const GET: RequestHandler = async ({ params }) => {
 
     let arrayBuffer: ArrayBuffer;
     try {
-        arrayBuffer = await getFileForPreview(pageId);
+        // Preview would save bandwidth, but Appwrite puts a cap on image transformations, so it actually ends up being cheaper to just serve the full image.
+        // arrayBuffer = await getFileForPreview(pageId);
+        arrayBuffer = await getFileForView(pageId);
     } catch (err) {
         console.error('Error fetching page:', err);
     }
