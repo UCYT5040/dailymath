@@ -17,6 +17,12 @@
 	let showPage = $state(false);
 	let revealAnswer = $state(false);
 
+	$effect(() => {
+		question.$id;
+		showPage = false;
+		revealAnswer = false;
+	})
+
 	let aiExplanationPending = $state(false);
 
 	async function requestAIExplanation() {
