@@ -1,5 +1,5 @@
 import { CronJob } from 'cron';
-import { createRow, decrementRowColumn, getFirstRow, incrementRowColumn, listRows, tables, updateRow } from './database';
+import { createRow, getFirstRow, incrementRowColumn, listRows, tables, updateRow } from './database';
 import { type Models, Query } from 'node-appwrite';
 import { getFileForView } from './storage';
 import { testNames } from '$lib/tests';
@@ -7,6 +7,12 @@ import { ai, isAutoGenerationAllowed } from './ai';
 import type { GenerateContentResponse } from '@google/genai';
 
 let isProcessorIdle = false;
+let isProcessingLocked = false;
+
+// Helper functions for lock management
+export function isProcessingCurrentlyLocked(): boolean {
+    return isProcessingLocked;
+}
 
 // Some 2-person test packets omit small print questions entirely (only including large print versions).
 // Report reviewers that see this will select all the large print questions and send them to be processed.
@@ -87,149 +93,163 @@ export async function processSinglePage(
     pageIds: string | string[],
     options: { override?: boolean, allowLargePrint?: boolean } = {}
 ): Promise<any> {
-    // Handle rate limiting
-    if (options.override) {
-        // Run rate limit check but don't await or check result (just increment count)
-        isAutoGenerationAllowed('gemini-2.5-flash').catch(() => {
-            // Ignore errors when overriding
-        });
-    } else {
-        // Normal rate limit check
-        const allowed = await isAutoGenerationAllowed('gemini-2.5-flash');
-        if (!allowed) {
-            console.log('Auto-generation limit reached for today, will retry later.');
+    // Check lock system (ignore lock for manual requests with override)
+    if (!options.override && isProcessingLocked) {
+        console.log('Processing is currently locked, returning early.');
+        return null;
+    }
+
+    // Set lock for automatic processing (not for manual requests)
+    if (!options.override) {
+        isProcessingLocked = true;
+    }
+
+    try {
+        // Handle rate limiting
+        if (options.override) {
+            // Run rate limit check but don't await or check result (just increment count)
+            isAutoGenerationAllowed('gemini-2.5-flash').catch(() => {
+                // Ignore errors when overriding
+            });
+        } else {
+            // Normal rate limit check
+            const allowed = await isAutoGenerationAllowed('gemini-2.5-flash');
+            if (!allowed) {
+                console.log('Auto-generation limit reached for today, will retry later.');
+                return null;
+            }
+        }
+
+        let normalPageIds: string[] = [];
+
+        if (Array.isArray(pageIds)) {
+            normalPageIds = pageIds;
+        } else {
+            normalPageIds = [pageIds];
+        }
+
+        // TODO: Wait... is this spread operator use even needed? IDK, I'm tired. Leaving it for now.
+        const pagePromises = [
+            ...(Array.isArray(normalPageIds) ? normalPageIds : [normalPageIds]).map((id) => getFileForView(id))
+        ]
+
+        const pageData = await Promise.all(pagePromises);
+
+        const hasMultiplePages = normalPageIds.length > 1;
+
+        const pageDataInline = pageData.map((data) => ({
+            inlineData: {
+                mimeType: "image/png",
+                data: Buffer.from(data).toString('base64'),
+            },
+        }));
+
+        let result: GenerateContentResponse | null;
+
+        try {
+            result = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                    prompt(!!options.allowLargePrint, hasMultiplePages),
+                    ...pageDataInline
+                ],
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: schema,
+                    thinkingConfig: {
+                        thinkingBudget: 1000
+                    },
+                    maxOutputTokens: 19000
+                }
+            });
+        } catch (error) {
+            console.error('Error during AI content generation:', error);
+            result = null;
+        }
+
+
+        let resultData;
+
+        try {
+            resultData = JSON.parse(result?.text || '');
+        } catch (e) {
+            console.error('Error parsing AI response JSON:', e);
+            console.log('JSON parsing failed, will retry this page later.');
             return null;
         }
-    }
 
-    let normalPageIds: string[] = [];
-
-    if (Array.isArray(pageIds)) {
-        normalPageIds = pageIds;
-    } else {
-        normalPageIds = [pageIds];
-    }
-
-    // TODO: Wait... is this spread operator use even needed? IDK, I'm tired. Leaving it for now.
-    const pagePromises = [
-        ...(Array.isArray(normalPageIds) ? normalPageIds : [normalPageIds]).map((id) => getFileForView(id))
-    ]
-
-    const pageData = await Promise.all(pagePromises);
-
-    const hasMultiplePages = normalPageIds.length > 1;
-
-    const pageDataInline = pageData.map((data) => ({
-        inlineData: {
-            mimeType: "image/png",
-            data: Buffer.from(data).toString('base64'),
-        },
-    }));
-
-    let result: GenerateContentResponse | null;
-
-    try {
-        result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-            prompt(!!options.allowLargePrint, hasMultiplePages),
-            ...pageDataInline
-        ],
-        config: {
-            responseMimeType: 'application/json',
-            responseSchema: schema,
-            thinkingConfig: {
-                thinkingBudget: 1000
-            },
-            maxOutputTokens: 19000
+        // Validate response structure
+        if (!resultData.pageType || (resultData.pageType !== 'none' && !resultData.test) || (resultData.pageType === 'questions' && !resultData.questions) || (resultData.pageType === 'answers' && !resultData.answers)) {
+            console.error('AI response is missing required fields or is malformed:', resultData);
+            console.log('AI response validation failed, will retry this page later.');
+            return null;
         }
-    }); } catch (error) {
-        console.error('Error during AI content generation:', error);
-        result = null;
-    }
-    
 
-    let resultData;
+        console.log('Processed page result:', resultData);
 
-    try {
-        resultData = JSON.parse(result?.text || '');
-    } catch (e) {
-        console.error('Error parsing AI response JSON:', e);
-        console.log('JSON parsing failed, will retry this page later.');
-        return null;
-    }
-
-    // Validate response structure
-    if (!resultData.pageType || (resultData.pageType !== 'none' && !resultData.test) || (resultData.pageType === 'questions' && !resultData.questions) || (resultData.pageType === 'answers' && !resultData.answers)) {
-        console.error('AI response is missing required fields or is malformed:', resultData);
-        console.log('AI response validation failed, will retry this page later.');
-        return null;
-    }
-
-    console.log('Processed page result:', resultData);
-
-    if (resultData.pageType === 'questions' && resultData.test && resultData.questions) {
-        // For each question, check if a row exists; if not, create it. If it does, update it.
-        for (const question of resultData.questions) {
-            try {
-                const existingRow = await getFirstRow(tables.questions, [
-                    Query.equal('competitionId', competitionId),
-                    Query.equal('test', resultData.test),
-                    Query.equal('questionNumber', question.number)
-                ]);
-                // Row exists, so update it
-                await updateRow(tables.questions, existingRow.$id, {
-                    questionContent: question.content,
-                    questionPageId: normalPageIds[0], // TODO: Handle multiple page IDs properly (although, this is such a rare case that it might not matter)
-                    includesDiagram: question.includesDiagram
-                });
-            } catch (error) {
-                // Row does not exist, so create it
-                await createRow(tables.questions, {
-                    competitionId: competitionId,
-                    test: resultData.test,
-                    questionNumber: question.number,
-                    questionContent: question.content,
-                    questionPageId: normalPageIds[0], // TODO: See above TODO comment
-                    includesDiagram: question.includesDiagram
-                });
+        if (resultData.pageType === 'questions' && resultData.test && resultData.questions) {
+            // For each question, check if a row exists; if not, create it. If it does, update it.
+            for (const question of resultData.questions) {
+                try {
+                    const existingRow = await getFirstRow(tables.questions, [
+                        Query.equal('competitionId', competitionId),
+                        Query.equal('test', resultData.test),
+                        Query.equal('questionNumber', question.number)
+                    ]);
+                    // Row exists, so update it
+                    await updateRow(tables.questions, existingRow.$id, {
+                        questionContent: question.content,
+                        questionPageId: normalPageIds[0], // TODO: Handle multiple page IDs properly (although, this is such a rare case that it might not matter)
+                        includesDiagram: question.includesDiagram
+                    });
+                } catch (error) {
+                    // Row does not exist, so create it
+                    await createRow(tables.questions, {
+                        competitionId: competitionId,
+                        test: resultData.test,
+                        questionNumber: question.number,
+                        questionContent: question.content,
+                        questionPageId: normalPageIds[0], // TODO: See above TODO comment
+                        includesDiagram: question.includesDiagram
+                    });
+                }
+            }
+        } else if (resultData.pageType === 'answers' && resultData.test && resultData.answers) {
+            // For each answer, check if a row exists; if not, create it. If it does, update it.
+            for (const answer of resultData.answers) {
+                try {
+                    const existingRow = await getFirstRow(tables.questions, [
+                        Query.equal('competitionId', competitionId),
+                        Query.equal('test', resultData.test),
+                        Query.equal('questionNumber', answer.number)
+                    ]);
+                    // Row exists, so update it
+                    await updateRow(tables.questions, existingRow.$id, {
+                        answerContent: answer.content,
+                        answerPageId: normalPageIds[0] // TODO: See above TODO comments
+                    });
+                } catch (error) {
+                    // Row does not exist, so create it
+                    await createRow(tables.questions, {
+                        competitionId: competitionId,
+                        test: resultData.test,
+                        questionNumber: answer.number,
+                        answerContent: answer.content,
+                        answerPageId: normalPageIds[0] // TODO: See above TODO comments
+                    });
+                }
             }
         }
-    } else if (resultData.pageType === 'answers' && resultData.test && resultData.answers) {
-        // For each answer, check if a row exists; if not, create it. If it does, update it.
-        for (const answer of resultData.answers) {
-            try {
-                const existingRow = await getFirstRow(tables.questions, [
-                    Query.equal('competitionId', competitionId),
-                    Query.equal('test', resultData.test),
-                    Query.equal('questionNumber', answer.number)
-                ]);
-                // Row exists, so update it
-                await updateRow(tables.questions, existingRow.$id, {
-                    answerContent: answer.content,
-                    answerPageId: normalPageIds[0] // TODO: See above TODO comments
-                });
-            } catch (error) {
-                // Row does not exist, so create it
-                await createRow(tables.questions, {
-                    competitionId: competitionId,
-                    test: resultData.test,
-                    questionNumber: answer.number,
-                    answerContent: answer.content,
-                    answerPageId: normalPageIds[0] // TODO: See above TODO comments
-                });
-            }
+
+        return resultData;
+    } finally {
+        // Release lock for automatic processing (not for manual requests)
+        if (!options.override) {
+            isProcessingLocked = false;
         }
     }
-
-    return resultData;
 }
 
-/*
-TODO: Improve counting/tracking of processed pages
-Currently, we increment prior to processing. This solves the issue of a race condition where a page is being processed multiple times, but it can lead to skipped pages if processing suddenly fails.
-A lock system would be ideal, but is more complex to implement with the current database structure, since pages are stored as an array within the uploads table rather than as separate rows.
-*/
 
 async function processQueue() {
     console.log('Checking for documents to process...');
@@ -261,14 +281,11 @@ async function processQueue() {
 
     if (resultData === null) {
         // Processing failed or rate limited, handle accordingly
-        if (document.nextPage > 0) {
-            await decrementRowColumn(tables.uploads, document.$id, 'nextPage', 1);
-        }
         isProcessorIdle = true;
         return;
     }
 
-    // Increment the nextPage index
+    // Increment the nextPage index only on success
     if (document.nextPage < document.pages.length - 1) {
         await incrementRowColumn(tables.uploads, document.$id, 'nextPage', 1);
     } else {
